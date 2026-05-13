@@ -7,28 +7,21 @@ from jinja2 import StrictUndefined, Template
 
 from minisweagent.exceptions import FormatError
 from minisweagent.models.utils.openai_multimodal import expand_multimodal_content
+from minisweagent.models.utils.tools import BashTool, Tool
 
-BASH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "bash",
-        "description": "Execute a bash command",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The bash command to execute",
-                }
-            },
-            "required": ["command"],
-        },
-    },
-}
+BASH_TOOL = BashTool.schema  # kept for backward compatibility
 
 
-def parse_toolcall_actions(tool_calls: list, *, format_error_template: str) -> list[dict]:
-    """Parse tool calls from the response. Raises FormatError if unknown tool or invalid args."""
+def parse_toolcall_actions(
+    tool_calls: list, *, format_error_template: str, tools: dict[str, Tool] | None = None
+) -> list[dict]:
+    """Parse tool calls from the response. Raises FormatError if unknown tool or invalid args.
+
+    Each tool compiles its args down to a bash command, so the returned action keeps
+    the existing `{"command": ..., "tool_call_id": ...}` shape that Environment.execute expects.
+    """
+    if tools is None:
+        tools = {"bash": BashTool()}
     if not tool_calls:
         raise FormatError(
             {
@@ -44,14 +37,21 @@ def parse_toolcall_actions(tool_calls: list, *, format_error_template: str) -> l
     for tool_call in tool_calls:
         error_msg = ""
         args = {}
+        name = tool_call.function.name
         try:
             args = json.loads(tool_call.function.arguments)
         except Exception as e:
             error_msg = f"Error parsing tool call arguments: {e}."
-        if tool_call.function.name != "bash":
-            error_msg += f"Unknown tool '{tool_call.function.name}'."
-        if not isinstance(args, dict) or "command" not in args:
-            error_msg += "Missing 'command' argument in bash tool call."
+        if name not in tools:
+            error_msg += f"Unknown tool '{name}'. Available: {sorted(tools)}."
+        if not isinstance(args, dict):
+            error_msg += "Tool arguments must be a JSON object."
+        command = ""
+        if not error_msg:
+            if err := tools[name].validate(args):
+                error_msg = err
+            else:
+                command = tools[name].to_command(args)
         if error_msg:
             raise FormatError(
                 {
@@ -62,7 +62,7 @@ def parse_toolcall_actions(tool_calls: list, *, format_error_template: str) -> l
                     "extra": {"interrupt_type": "FormatError"},
                 }
             )
-        actions.append({"command": args["command"], "tool_call_id": tool_call.id})
+        actions.append({"command": command, "tool_call_id": tool_call.id})
     return actions
 
 
