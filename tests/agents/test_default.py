@@ -126,6 +126,57 @@ def model_factory(request, default_config, toolcall_config):
 # --- Tests ---
 
 
+def test_parallel_submit_preserves_outputs_and_pairing():
+    """Regression: when a parallel response mixes a normal action with a submit-like action,
+    the first action's real output must survive in the trajectory, the submitting action
+    must get a synthesized tool message instead of being dropped, and every assistant
+    tool_call_id must have a matching tool message (OpenAI/Anthropic protocol requirement).
+    """
+    config_path = Path("src/minisweagent/config/mini.yaml")
+    with open(config_path) as f:
+        config = yaml.safe_load(f)["agent"]
+
+    agent = DefaultAgent(
+        model=make_tc_model(
+            [
+                (
+                    "doing two things at once",
+                    [
+                        {"command": "echo first-action-output"},
+                        {"command": "echo 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT'\necho final-submission"},
+                    ],
+                ),
+            ]
+        ),
+        env=LocalEnvironment(),
+        **config,
+    )
+    info = agent.run("test parallel submit")
+
+    assert info["exit_status"] == "Submitted"
+
+    # Expected trajectory tail: [..., assistant{2 tool_calls}, tool{call_0_0}, tool{call_0_1}, exit]
+    assert agent.messages[-1].get("role") == "exit"
+    tool_messages = agent.messages[-3:-1]
+    assert len(tool_messages) == 2, "Both parallel actions must produce a tool message"
+
+    # First action's real output preserved (not lost to the broken-comprehension bug).
+    assert "first-action-output" in get_observation_text(tool_messages[0])
+    assert "action was not executed" not in get_observation_text(tool_messages[0])
+
+    # Submitting action's tool message carries the synthesized real output, not the placeholder.
+    submit_text = get_observation_text(tool_messages[1])
+    assert "final-submission" in submit_text
+    assert "action was not executed" not in submit_text
+    assert tool_messages[1].get("extra", {}).get("returncode") == 0
+
+    # Assistant tool_calls must be paired 1:1 with the tool messages by id.
+    assistant_msg = agent.messages[-4]
+    tool_call_ids = [tc["id"] for tc in assistant_msg["tool_calls"]]
+    paired_ids = [m.get("tool_call_id") for m in tool_messages]
+    assert tool_call_ids == paired_ids
+
+
 def test_successful_completion(model_factory):
     """Test agent completes successfully when COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT is encountered."""
     factory, config = model_factory
@@ -347,17 +398,17 @@ def test_message_history_tracking(model_factory):
     assert info["exit_status"] == "Submitted"
     assert info["submission"] == "done\n"
 
-    # Should have 6 messages: system, user, assistant, observation, assistant, exit
-    assert len(agent.messages) == 6
-    # First two are system and user
-    assert get_text(agent.messages[0])  # system has content
-    assert get_text(agent.messages[1])  # user has content
-    # Third is assistant response
+    # 7 messages: system, user, assistant, observation, assistant, observation, exit.
+    # The trailing observation pairs with the submitting action's tool_call so the trajectory
+    # is OpenAI/Anthropic protocol-legal (every assistant tool_call has a matching tool result).
+    assert len(agent.messages) == 7
+    assert get_text(agent.messages[0])  # system
+    assert get_text(agent.messages[1])  # user
     assert is_assistant_message(agent.messages[2])
-    # Fourth is observation
     assert is_observation_message(agent.messages[3])
-    # Fifth is assistant response
     assert is_assistant_message(agent.messages[4])
+    assert is_observation_message(agent.messages[5])
+    assert agent.messages[6].get("role") == "exit"
 
 
 def test_step_adds_messages(model_factory):
@@ -400,9 +451,11 @@ def test_observations_captured(model_factory):
 
     agent.run("Multi-step task")
     observations = [get_observation_text(msg) for msg in agent.messages if is_observation_message(msg)]
-    assert len(observations) == 2
+    # Three observations: 'first', 'second', and the synthesized observation for the submit action.
+    assert len(observations) == 3
     assert "first" in observations[0]
     assert "second" in observations[1]
+    assert "done" in observations[2]
 
 
 def test_empty_actions_handling(model_factory):

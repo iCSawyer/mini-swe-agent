@@ -36,9 +36,11 @@ def test_run_hello_world_end_to_end(local_test_data):
     assert agent is not None
     messages = agent.messages
 
-    # Verify we have the right number of messages
-    # Should be: system + user (initial) + (assistant + user) * number_of_steps
-    expected_total_messages = 2 + (len(model_responses) * 2)
+    # Verify we have the right number of messages.
+    # 2 (system + initial user) + 2 per step (assistant + observation) + 1 (final exit message).
+    # The last step's observation is the synthesized submit observation paired with the
+    # submitting tool_call so the trajectory stays protocol-legal.
+    expected_total_messages = 2 + (len(model_responses) * 2) + 1
     assert len(messages) == expected_total_messages, f"Expected {expected_total_messages} messages, got {len(messages)}"
 
     assert_observations_match(expected_observations, messages)

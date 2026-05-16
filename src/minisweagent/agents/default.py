@@ -11,7 +11,7 @@ from jinja2 import StrictUndefined, Template
 from pydantic import BaseModel
 
 from minisweagent import Environment, Model, __version__
-from minisweagent.exceptions import InterruptAgentFlow, LimitsExceeded
+from minisweagent.exceptions import InterruptAgentFlow, LimitsExceeded, Submitted
 from minisweagent.utils.serialize import recursive_merge
 
 
@@ -118,8 +118,32 @@ class DefaultAgent:
 
     def execute_actions(self, message: dict) -> list[dict]:
         """Execute actions in message, add observation messages, return them."""
-        outputs = [self.env.execute(action) for action in message.get("extra", {}).get("actions", [])]
-        return self.add_messages(*self.model.format_observation_messages(message, outputs, self.get_template_vars()))
+        actions = message.get("extra", {}).get("actions", [])
+        outputs: list[dict] = []
+        try:
+            for action in actions:
+                outputs.append(self.env.execute(action))
+        except Submitted as e:
+            # Preserve the submitting action's output so the tool message is meaningful
+            # and assistant.tool_calls stays paired with tool messages 1:1.
+            outputs.append(self._synthesize_submit_output(e))
+            raise
+        finally:
+            result = self.add_messages(
+                *self.model.format_observation_messages(message, outputs, self.get_template_vars())
+            )
+        return result
+
+    def _synthesize_submit_output(self, exc: Submitted) -> dict:
+        """Build the output dict env.execute would have returned for the submitting action,
+        had Submitted not short-circuited it. Keeps the tool message meaningful instead of
+        falling back to the not_executed padding."""
+        submission = exc.messages[0].get("extra", {}).get("submission", "") if exc.messages else ""
+        return {
+            "output": f"COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n{submission}",
+            "returncode": 0,
+            "exception_info": "",
+        }
 
     def serialize(self, *extra_dicts) -> dict:
         """Serialize agent state to a json-compatible nested dictionary for saving."""

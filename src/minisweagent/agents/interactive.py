@@ -105,16 +105,7 @@ class InteractiveAgent(DefaultAgent):
             for action in actions:
                 outputs.append(self.env.execute(action))
         except Submitted as e:
-            # env.execute short-circuited before returning the output dict, so the submitting
-            # action would otherwise be rendered as "action was not executed". Synthesize what
-            # env would have returned (sentinel + submission text) so the tool message carries
-            # the real submission.
-            submission = e.messages[0].get("extra", {}).get("submission", "")
-            outputs.append({
-                "output": f"COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n{submission}",
-                "returncode": 0,
-                "exception_info": "",
-            })
+            outputs.append(self._synthesize_submit_output(e))
             self._check_for_new_task_or_submit(e)
         finally:
             result = self.add_messages(

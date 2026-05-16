@@ -21,6 +21,6 @@
   },
   {
     "role": "user",
-    "content": ""
+    "content": "<returncode>0</returncode>\n<output>\nCOMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n</output>"
   }
 ]
