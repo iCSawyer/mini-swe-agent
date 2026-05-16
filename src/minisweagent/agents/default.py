@@ -140,7 +140,7 @@ class DefaultAgent:
                 "submission": last_extra.get("submission", ""),
             },
             "messages": self.messages,
-            "trajectory_format": "mini-swe-agent-1.1",
+            "trajectory_format": "mini-swe-agent-1.1-junkai",
         }
         return recursive_merge(agent_data, self.model.serialize(), self.env.serialize(), *extra_dicts)
 

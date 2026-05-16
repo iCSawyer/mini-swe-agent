@@ -4,9 +4,12 @@ import json
 
 
 def _format_tool_call(args_str: str, tool_name: str = "") -> str:
-    """Rich markup; renderer needs markup=True for color. `<tool>`/`<arguments>` are
-    section markers (intentionally unclosed), not real XML."""
-    return f"[bold green]Tool:[/bold green]\n<tool>\n{tool_name}\n<arguments>\n{args_str}"
+    try:
+        args = json.loads(args_str) if isinstance(args_str, str) else args_str
+    except Exception:
+        args = args_str
+    return f"```\ntool_name: {tool_name}\narguments: {args}\n```"
+
 
 
 def _format_observation(content: str) -> str | None:

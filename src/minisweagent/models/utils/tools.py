@@ -7,6 +7,7 @@ Add new tools by defining a class here and registering it in BUILTIN.
 from __future__ import annotations
 
 import shlex
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 
@@ -81,7 +82,7 @@ class SubmitTool:
 
 
 
-BUILTIN: dict[str, type[Tool]] = {
+BUILTIN: dict[str, Callable[[], Tool]] = {
     "bash": BashTool,
     "submit": SubmitTool,
 }
@@ -89,6 +90,11 @@ BUILTIN: dict[str, type[Tool]] = {
 
 def resolve_tools(specs: list[str]) -> dict[str, Tool]:
     """Resolve a list of builtin tool names into a name->Tool registry."""
+    if not specs:
+        raise ValueError(
+            "`tools` must contain at least one tool."
+            f"Available: {sorted(BUILTIN)}."
+        )
     out: dict[str, Tool] = {}
     for spec in specs:
         if spec not in BUILTIN:
