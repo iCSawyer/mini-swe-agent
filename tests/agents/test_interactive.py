@@ -130,6 +130,36 @@ def model_factory(request, default_config, toolcall_config):
         return make_response_api_model, toolcall_config
 
 
+def test_submit_tool_message_carries_real_output(model_factory):
+    """Regression: the tool message paired with the submitting action must contain the
+    real submission, not the 'action was not executed' placeholder that comes from
+    Submitted short-circuiting env.execute before the output is appended."""
+    factory, config = model_factory
+    with mock_prompts(["", ""]):  # confirm action, no new task on exit
+        agent = InteractiveAgent(
+            model=factory(
+                [
+                    ("Finishing", [{"command": "echo 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT'\necho 'real submission text'"}]),
+                ]
+            ),
+            env=LocalEnvironment(),
+            **config,
+        )
+        info = agent.run("Test synthesized submit observation")
+
+    assert info["exit_status"] == "Submitted"
+    # last message is the exit; second-to-last is the tool message for the submitting action
+    assert agent.messages[-1].get("role") == "exit"
+    tool_msg = agent.messages[-2]
+    # Response API uses `output` for tool results, chat formats use `content`
+    text = get_text(tool_msg) or tool_msg.get("output", "")
+    assert "real submission text" in text
+    assert "action was not executed" not in text
+    extra = tool_msg.get("extra", {})
+    assert extra.get("returncode") == 0
+    assert not extra.get("exception_info")
+
+
 def test_successful_completion_with_confirmation(model_factory):
     """Test agent completes successfully when user confirms all actions."""
     factory, config = model_factory
