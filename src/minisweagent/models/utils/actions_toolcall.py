@@ -62,7 +62,7 @@ def parse_toolcall_actions(
                     "extra": {"interrupt_type": "FormatError"},
                 }
             )
-        actions.append({"command": command, "tool_call_id": tool_call.id})
+        actions.append({"command": command, "tool_call_id": tool_call.id, "tool_name": name})
     return actions
 
 
@@ -89,6 +89,7 @@ def format_toolcall_observation_messages(
                 "returncode": output.get("returncode"),
                 "timestamp": time.time(),
                 "exception_info": output.get("exception_info"),
+                "tool_name": action.get("tool_name", ""),
                 **output.get("extra", {}),
             },
         }

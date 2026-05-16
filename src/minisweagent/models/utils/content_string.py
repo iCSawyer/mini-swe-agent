@@ -3,15 +3,10 @@
 import json
 
 
-def _format_tool_call(args_str: str) -> str:
-    """Format tool call arguments, extracting command if it's a bash call."""
-    try:
-        args = json.loads(args_str) if isinstance(args_str, str) else args_str
-        if isinstance(args, dict) and "command" in args:
-            return f"```\n{args['command']}\n```"
-    except Exception:
-        pass
-    return f"```\n{args_str}\n```"
+def _format_tool_call(args_str: str, tool_name: str = "") -> str:
+    """Rich markup; renderer needs markup=True for color. `<tool>`/`<arguments>` are
+    section markers (intentionally unclosed), not real XML."""
+    return f"[bold green]Tool:[/bold green]\n<tool>\n{tool_name}\n<arguments>\n{args_str}"
 
 
 def _format_observation(content: str) -> str | None:
@@ -53,7 +48,7 @@ def get_content_string(message: dict) -> str:
             if not isinstance(item, dict):
                 continue
             if item.get("type") == "tool_use":
-                texts.append(_format_tool_call(json.dumps(item.get("input", {}))))
+                texts.append(_format_tool_call(json.dumps(item.get("input", {})), item.get("name", "")))
             elif item.get("type") == "tool_result":
                 rc = item.get("content", "")
                 if isinstance(rc, str):
@@ -67,7 +62,8 @@ def get_content_string(message: dict) -> str:
             func = tc.get("function", {}) if isinstance(tc, dict) else getattr(tc, "function", None)
             if func:
                 args = func.get("arguments", "{}") if isinstance(func, dict) else getattr(func, "arguments", "{}")
-                texts.append(_format_tool_call(args))
+                name = func.get("name", "") if isinstance(func, dict) else getattr(func, "name", "")
+                texts.append(_format_tool_call(args, name))
 
     # Handle Responses API format (output array)
     if output := message.get("output"):
@@ -82,6 +78,6 @@ def get_content_string(message: dict) -> str:
                         if isinstance(c, dict) and (text := c.get("text")):
                             texts.append(text)
                 elif item.get("type") == "function_call":
-                    texts.append(_format_tool_call(item.get("arguments", "{}")))
+                    texts.append(_format_tool_call(item.get("arguments", "{}"), item.get("name", "")))
 
     return "\n\n".join(t for t in texts if t)
