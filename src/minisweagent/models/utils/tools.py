@@ -6,6 +6,7 @@ Add new tools by defining a class here and registering it in BUILTIN.
 
 from __future__ import annotations
 
+import shlex
 from typing import Protocol, runtime_checkable
 
 
@@ -15,7 +16,8 @@ class Tool(Protocol):
     schema: dict  # OpenAI function tool schema
 
     def validate(self, args: dict) -> str | None:
-        """Return a human-readable error message if args are invalid, else None."""
+        """Return an error message if invalid, else None. Falsy = valid; non-empty string
+        is surfaced verbatim to the model."""
         ...
 
     def to_command(self, args: dict) -> str: ...
@@ -47,8 +49,41 @@ class BashTool:
         return args["command"]
 
 
+class SubmitTool:
+    name = "submit"
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "submit",
+            "description": (
+                "Finish the task and return your final answer. "
+                "The agent exits after this call, so only use it when you are done."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string", "description": "Final answer to return to the user."}
+                },
+                "required": ["answer"],
+            },
+        },
+    }
+
+    def validate(self, args: dict) -> str | None:
+        if "answer" not in args:
+            return "Missing 'answer' argument in submit tool call."
+        if not isinstance(args["answer"], str):
+            return "'answer' argument must be a string."
+        return None
+
+    def to_command(self, args: dict) -> str:
+        return f"echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && printf %s {shlex.quote(args['answer'])}"
+
+
+
 BUILTIN: dict[str, type[Tool]] = {
     "bash": BashTool,
+    "submit": SubmitTool,
 }
 
 

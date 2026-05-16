@@ -7,7 +7,7 @@ from jinja2 import StrictUndefined, Template
 
 from minisweagent.exceptions import FormatError
 from minisweagent.models.utils.openai_multimodal import expand_multimodal_content
-from minisweagent.models.utils.tools import BashTool, Tool
+from minisweagent.models.utils.tools import BashTool, SubmitTool, Tool
 
 BASH_TOOL = BashTool.schema  # kept for backward compatibility
 
@@ -21,7 +21,7 @@ def parse_toolcall_actions(
     the existing `{"command": ..., "tool_call_id": ...}` shape that Environment.execute expects.
     """
     if tools is None:
-        tools = {"bash": BashTool()}
+        tools = {"bash": BashTool(), "submit": SubmitTool()}
     if not tool_calls:
         raise FormatError(
             {

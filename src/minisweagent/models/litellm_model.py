@@ -43,9 +43,9 @@ class LitellmModelConfig(BaseModel):
     """Template used to render the observation after executing an action."""
     multimodal_regex: str = ""
     """Regex to extract multimodal content. Empty string disables multimodal processing."""
-    tools: list[str] = ["bash"]
+    tools: list[str] = ["bash", "submit"]
     """Tools to expose to the model. Each entry is a builtin tool name registered in
-    `minisweagent.models.utils.tools.BUILTIN` (currently: 'bash')."""
+    `minisweagent.models.utils.tools.BUILTIN` (currently: 'bash', 'submit')."""
 
 
 class LitellmModel:
