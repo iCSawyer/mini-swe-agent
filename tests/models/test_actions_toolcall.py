@@ -27,7 +27,7 @@ class TestParseToolcallActions:
         tool_call.function.arguments = '{"command": "echo hello"}'
         tool_call.id = "call_123"
         assert parse_toolcall_actions([tool_call], format_error_template="{{ error }}") == [
-            {"command": "echo hello", "tool_call_id": "call_123"}
+            {"command": "echo hello", "tool_call_id": "call_123", "tool_name": "bash"}
         ]
 
     def test_multiple_valid_tool_calls(self):
@@ -40,8 +40,8 @@ class TestParseToolcallActions:
             calls.append(tc)
         result = parse_toolcall_actions(calls, format_error_template="{{ error }}")
         assert len(result) == 3
-        assert result[0] == {"command": "cmd0", "tool_call_id": "call_0"}
-        assert result[2] == {"command": "cmd2", "tool_call_id": "call_2"}
+        assert result[0] == {"command": "cmd0", "tool_call_id": "call_0", "tool_name": "bash"}
+        assert result[2] == {"command": "cmd2", "tool_call_id": "call_2", "tool_name": "bash"}
 
     def test_unknown_tool_raises_format_error(self):
         tool_call = MagicMock()
